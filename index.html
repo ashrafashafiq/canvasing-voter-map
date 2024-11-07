@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Map with City Dropdown Filter</title>
   
+  <!-- Bootstrap CSS -->
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
@@ -15,8 +18,8 @@
   <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
   
   <style>
-    #map { height: 80vh; width: 100%; }
-    #filterContainer { padding: 10px; background: #f9f9f9; }
+    /* Customize map and progress bar styling */
+    #map { height: 75vh; width: 100%; }
     #progressBarContainer {
       width: 100%; 
       background-color: #f3f3f3; 
@@ -29,6 +32,14 @@
       height: 5px; 
       background-color: #4caf50;
     }
+    .filter-label { font-weight: bold; }
+    .btn-custom {
+      background-color: #007bff;
+      color: white;
+    }
+    .btn-custom:hover {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
@@ -37,20 +48,43 @@
   <div id="progressBar"></div>
 </div>
 
-<div id="filterContainer">
-  <label>Last Name: <input type="text" id="filterLastName" placeholder="Enter last name" /></label>
-  <label>First Name: <input type="text" id="filterFirstName" placeholder="Enter first name" /></label>
-  <label>City:
-    <select id="filterCity">
-      <option value="">All Cities</option>
-    </select>
-  </label>
-  <label>Voter File VANID: <input type="text" id="filterVanID" placeholder="Enter VAN ID" /></label>
-  <button onclick="applyFilters()">Apply Filters</button>
-  <button onclick="clearFilters()">Clear Filters</button>
+<!-- Filter Container -->
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+      <div class="card p-3">
+        <h5 class="text-center font-weight-bold">Filter Options</h5>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label for="filterLastName" class="filter-label">Last Name:</label>
+            <input type="text" id="filterLastName" class="form-control" placeholder="Enter last name" />
+          </div>
+          <div class="form-group col-md-6">
+            <label for="filterFirstName" class="filter-label">First Name:</label>
+            <input type="text" id="filterFirstName" class="form-control" placeholder="Enter first name" />
+          </div>
+          <div class="form-group col-md-6">
+            <label for="filterCity" class="filter-label">City:</label>
+            <select id="filterCity" class="form-control">
+              <option value="">All Cities</option>
+            </select>
+          </div>
+          <div class="form-group col-md-6">
+            <label for="filterVanID" class="filter-label">Voter File VANID:</label>
+            <input type="text" id="filterVanID" class="form-control" placeholder="Enter VAN ID" />
+          </div>
+        </div>
+        <div class="text-center">
+          <button onclick="applyFilters()" class="btn btn-custom mr-2">Apply Filters</button>
+          <button onclick="clearFilters()" class="btn btn-secondary">Clear Filters</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<div id="map"></div>
+<!-- Map Container -->
+<div id="map" class="mt-4"></div>
 
 <script>
   const map = L.map('map').setView([0, 0], 2);  // Initial global view
