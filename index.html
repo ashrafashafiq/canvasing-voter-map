@@ -35,8 +35,8 @@
 
   // Google Sheets API variables
   const apiKey = 'YOUR_GOOGLE_SHEETS_API_KEY';
-  const sheetId = 'YOUR_GOOGLE_SHEET_ID';
-  const sheetRange = 'Sheet1!A:D';  // Adjust the range as per your data
+  const sheetId = '1lXA0xNLPHvO-fkacup3O3w4XXxoF81mdixAdAVw79_U';
+  const sheetRange = 'merged!A:J';  // Adjust the range as per your data
 
   // Fetch data from Google Sheets API
   fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetRange}?key=${apiKey}`)
@@ -44,21 +44,40 @@
     .then(data => {
       const rows = data.values;
       
-      // Assuming your data headers are: ['Latitude', 'Longitude', 'Name', 'Address']
+      // Assuming your headers are in the first row:
+      const headers = rows[0];
+      
+      // Map header names to column indexes for easy reference
+      const colIndex = {};
+      headers.forEach((header, i) => {
+        colIndex[header] = i;
+      });
+
+      // Loop through data rows and add markers
       rows.slice(1).forEach(row => {
-        const [latitude, longitude, name, address] = row;
+        const lat = row[colIndex['Latitude']];
+        const lon = row[colIndex['Longitude']];
+        const fullName = `${row[colIndex['FirstName']]} ${row[colIndex['MiddleName']]} ${row[colIndex['LastName']]}`;
+        const address = row[colIndex['FullAddress']];
+        const distance = row[colIndex['Distance']];
+        const vanId = row[colIndex['Voter File VANID']];
 
         // Add a marker for each entry
-        if (latitude && longitude) {
-          L.marker([latitude, longitude]).addTo(map)
-            .bindPopup(`<strong>${name}</strong><br>${address}`);
+        if (lat && lon) {
+          L.marker([lat, lon]).addTo(map)
+            .bindPopup(`
+              <strong>Name:</strong> ${fullName}<br>
+              <strong>Address:</strong> ${address}<br>
+              <strong>Voter ID:</strong> ${vanId}<br>
+              <strong>Distance:</strong> ${distance} km
+            `);
         }
       });
 
       // Center map to first entry's location
       if (rows.length > 1) {
-        const [latitude, longitude] = rows[1];
-        map.setView([latitude, longitude], 10);
+        const [lat, lon] = [rows[1][colIndex['Latitude']], rows[1][colIndex['Longitude']]];
+        map.setView([lat, lon], 10);
       }
     })
     .catch(error => console.error('Error loading Google Sheets data:', error));
