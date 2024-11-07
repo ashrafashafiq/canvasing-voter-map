@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Map with Searchable Filters</title>
+  <title>Map with City Dropdown Filter</title>
   
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -17,27 +17,35 @@
   <style>
     #map { height: 80vh; width: 100%; }
     #filterContainer { padding: 10px; background: #f9f9f9; }
+    #progressBarContainer {
+      width: 100%; 
+      background-color: #f3f3f3; 
+      position: fixed; 
+      top: 0; 
+      z-index: 1000;
+    }
+    #progressBar {
+      width: 0; 
+      height: 5px; 
+      background-color: #4caf50;
+    }
   </style>
 </head>
 <body>
 
+<div id="progressBarContainer">
+  <div id="progressBar"></div>
+</div>
+
 <div id="filterContainer">
-  <label>
-    Last Name:
-    <input type="text" id="filterLastName" placeholder="Enter last name" />
+  <label>Last Name: <input type="text" id="filterLastName" placeholder="Enter last name" /></label>
+  <label>First Name: <input type="text" id="filterFirstName" placeholder="Enter first name" /></label>
+  <label>City:
+    <select id="filterCity">
+      <option value="">All Cities</option>
+    </select>
   </label>
-  <label>
-    First Name:
-    <input type="text" id="filterFirstName" placeholder="Enter first name" />
-  </label>
-  <label>
-    City:
-    <input type="text" id="filterCity" placeholder="Enter city" />
-  </label>
-  <label>
-    Voter File VANID:
-    <input type="text" id="filterVanID" placeholder="Enter VAN ID" />
-  </label>
+  <label>Voter File VANID: <input type="text" id="filterVanID" placeholder="Enter VAN ID" /></label>
   <button onclick="applyFilters()">Apply Filters</button>
   <button onclick="clearFilters()">Clear Filters</button>
 </div>
@@ -45,106 +53,134 @@
 <div id="map"></div>
 
 <script>
-  // Initialize the map
-  const map = L.map('map').setView([0, 0], 2);  // Global view
-
-  // Add OpenStreetMap tiles
+  const map = L.map('map').setView([0, 0], 2);  // Initial global view
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
-  // Marker cluster group
-  let markerCluster = L.markerClusterGroup();
-
-  // Your Apps Script URL (replace with your actual URL)
   const scriptUrl = 'https://script.google.com/macros/s/AKfycbxNuJTdj7X5yOO61A0lTcUHhv8XnCpc06Op9YmRdlV5GvaProCGoxqoLS4zRK8OwEtK/exec';
+  let markerCluster = L.markerClusterGroup();
+  let allMarkers = [];
+  let uniqueCities = new Set();  // Store unique cities
 
-  let allMarkers = [];  // Store all markers for filtering
+  function fetchData() {
+    fetch(scriptUrl)
+      .then(response => response.json())
+      .then(data => {
+        if (data.length > 1) {
+          const headers = data[0];
+          const colIndex = {};
+          headers.forEach((header, i) => colIndex[header] = i);
 
-  // Fetch data from Google Apps Script API
-  fetch(scriptUrl)
-    .then(response => response.json())
-    .then(data => {
-      if (data.length > 1) {  // Verify data is not empty
-        const headers = data[0];
-        const colIndex = {};
-        headers.forEach((header, i) => {
-          colIndex[header] = i;
-        });
+          // Extract unique cities for the dropdown
+          data.slice(1).forEach(row => {
+            const city = row[colIndex['mCity']];
+            if (city) uniqueCities.add(city);
+          });
 
-        data.slice(1).forEach(row => {  // Skip headers
-          const lat = parseFloat(row[colIndex['Latitude']]);
-          const lon = parseFloat(row[colIndex['Longitude']]);
-          const lastName = row[colIndex['LastName']];
-          const firstName = row[colIndex['FirstName']];
-          const city = row[colIndex['mCity']];
-          const vanId = row[colIndex['Voter File VANID']];
-          const fullAddress = row[colIndex['FullAddress']];
-          const distance = row[colIndex['Distance']];
+          populateCityDropdown();  // Populate city dropdown after gathering unique cities
+          loadMarkersInBatches(data, colIndex);  // Start loading markers
+        }
+      })
+      .catch(error => console.error('Error loading data:', error));
+  }
 
-          if (!isNaN(lat) && !isNaN(lon)) {
-            const popupContent = `
-              <strong>Name:</strong> ${lastName}, ${firstName}<br>
-              <strong>City:</strong> ${city}<br>
-              <strong>Address:</strong> ${fullAddress}<br>
-              <strong>Distance:</strong> ${distance} km<br>
-              <strong>Voter ID:</strong> ${vanId}
-            `;
-            const tooltipContent = `${lastName}, ${firstName} - ${city}`;
+  function populateCityDropdown() {
+    const cityDropdown = document.getElementById('filterCity');
+    uniqueCities.forEach(city => {
+      const option = document.createElement('option');
+      option.value = city;
+      option.textContent = city;
+      cityDropdown.appendChild(option);
+    });
+  }
 
-            const marker = L.marker([lat, lon])
-              .bindPopup(popupContent)
-              .bindTooltip(tooltipContent);
+  function loadMarkersInBatches(data, colIndex, batchSize = 50, startIndex = 1) {
+    const totalMarkers = data.length - 1;
 
-            // Store marker data for filtering
-            marker.data = { lastName, firstName, city, vanId };
+    function updateProgressBar(loadedCount) {
+      const progress = (loadedCount / totalMarkers) * 100;
+      document.getElementById('progressBar').style.width = progress + '%';
+    }
 
-            markerCluster.addLayer(marker);
-            allMarkers.push(marker);  // Save all markers for later filtering
-          }
-        });
+    const batchLoad = () => {
+      const endIndex = Math.min(startIndex + batchSize, totalMarkers + 1);
+      for (let i = startIndex; i < endIndex; i++) {
+        const row = data[i];
+        const lat = parseFloat(row[colIndex['Latitude']]);
+        const lon = parseFloat(row[colIndex['Longitude']]);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          const marker = createMarker(row, colIndex);
+          markerCluster.addLayer(marker);
+          allMarkers.push(marker);
+        }
+      }
+      
+      map.addLayer(markerCluster);
+      updateProgressBar(endIndex);
 
-        map.addLayer(markerCluster);
-
-        // Center map to first valid location
+      startIndex += batchSize;
+      if (startIndex <= totalMarkers) {
+        setTimeout(batchLoad, 0);  // Yield to keep the page responsive
+      } else {
         const firstLat = parseFloat(data[1][colIndex['Latitude']]);
         const firstLon = parseFloat(data[1][colIndex['Longitude']]);
         if (!isNaN(firstLat) && !isNaN(firstLon)) {
           map.setView([firstLat, firstLon], 10);
         }
+        document.getElementById('progressBarContainer').style.display = 'none';  // Hide progress bar
       }
-    })
-    .catch(error => console.error('Error loading Google Sheets data:', error));
+    };
 
-  // Apply filters based on user input
+    batchLoad();  // Start loading the first batch
+  }
+
+  function createMarker(row, colIndex) {
+    const lat = parseFloat(row[colIndex['Latitude']]);
+    const lon = parseFloat(row[colIndex['Longitude']]);
+    const lastName = row[colIndex['LastName']];
+    const firstName = row[colIndex['FirstName']];
+    const city = row[colIndex['mCity']];
+    const vanId = row[colIndex['Voter File VANID']];
+    const fullAddress = row[colIndex['FullAddress']];
+    const distance = row[colIndex['Distance']];
+
+    const popupContent = `
+      <strong>Name:</strong> ${lastName}, ${firstName}<br>
+      <strong>City:</strong> ${city}<br>
+      <strong>Address:</strong> ${fullAddress}<br>
+      <strong>Distance:</strong> ${distance} km<br>
+      <strong>Voter ID:</strong> ${vanId}
+    `;
+    const tooltipContent = `${lastName}, ${firstName} - ${city}`;
+    
+    const marker = L.marker([lat, lon]).bindPopup(popupContent).bindTooltip(tooltipContent);
+    marker.data = { lastName, firstName, city, vanId };
+    return marker;
+  }
+
   function applyFilters() {
     const filterLastName = document.getElementById('filterLastName').value.toLowerCase();
     const filterFirstName = document.getElementById('filterFirstName').value.toLowerCase();
-    const filterCity = document.getElementById('filterCity').value.toLowerCase();
+    const filterCity = document.getElementById('filterCity').value;
     const filterVanID = document.getElementById('filterVanID').value.toLowerCase();
 
-    // Clear current markers
     markerCluster.clearLayers();
-
     allMarkers.forEach(marker => {
       const { lastName, firstName, city, vanId } = marker.data;
-
-      // Apply filter conditions (only add markers that match all filters)
       if (
         (filterLastName === '' || lastName.toLowerCase().includes(filterLastName)) &&
         (filterFirstName === '' || firstName.toLowerCase().includes(filterFirstName)) &&
-        (filterCity === '' || city.toLowerCase().includes(filterCity)) &&
+        (filterCity === '' || city === filterCity) &&
         (filterVanID === '' || vanId.toLowerCase().includes(filterVanID))
       ) {
-        markerCluster.addLayer(marker);  // Re-add matching markers to cluster
+        markerCluster.addLayer(marker);
       }
     });
-
     map.addLayer(markerCluster);
   }
 
-  // Clear filters and reset all markers
   function clearFilters() {
     document.getElementById('filterLastName').value = '';
     document.getElementById('filterFirstName').value = '';
@@ -155,6 +191,8 @@
     allMarkers.forEach(marker => markerCluster.addLayer(marker));
     map.addLayer(markerCluster);
   }
+
+  fetchData();  // Start fetching data immediately
 </script>
 
 </body>
