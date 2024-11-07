@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Map with Google Sheets Data</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  
+  <!-- Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  
+  <!-- Custom styling for map -->
+  <style>
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script>
+  // Initialize the map
+  const map = L.map('map').setView([0, 0], 2);  // Start with a global view
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // Google Sheets API variables
+  const apiKey = 'YOUR_GOOGLE_SHEETS_API_KEY';
+  const sheetId = 'YOUR_GOOGLE_SHEET_ID';
+  const sheetRange = 'Sheet1!A:D';  // Adjust the range as per your data
+
+  // Fetch data from Google Sheets API
+  fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetRange}?key=${apiKey}`)
+    .then(response => response.json())
+    .then(data => {
+      const rows = data.values;
+      
+      // Assuming your data headers are: ['Latitude', 'Longitude', 'Name', 'Address']
+      rows.slice(1).forEach(row => {
+        const [latitude, longitude, name, address] = row;
+
+        // Add a marker for each entry
+        if (latitude && longitude) {
+          L.marker([latitude, longitude]).addTo(map)
+            .bindPopup(`<strong>${name}</strong><br>${address}`);
+        }
+      });
+
+      // Center map to first entry's location
+      if (rows.length > 1) {
+        const [latitude, longitude] = rows[1];
+        map.setView([latitude, longitude], 10);
+      }
+    })
+    .catch(error => console.error('Error loading Google Sheets data:', error));
+</script>
+
+</body>
+</html>
